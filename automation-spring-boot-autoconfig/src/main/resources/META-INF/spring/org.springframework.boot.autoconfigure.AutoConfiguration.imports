@@ -1,0 +1,3 @@
+org.sequeless.automation.autoconfigure.AutomationCoreAutoConfiguration
+org.sequeless.automation.autoconfigure.InProcessAutomationAutoConfiguration
+org.sequeless.automation.autoconfigure.TemporalAutomationAutoConfiguration
