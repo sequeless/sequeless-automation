@@ -63,7 +63,7 @@ Everything below happens in the new repo, on the copy, before the copy is used. 
 
 - `DefaultActionExecutor.commitSetProperty` (lines 135 to 175) reads the object with `objectStorePort.find`, compares the value, builds the candidate `BusinessObject` (version + 1, the `Audit` with the original `createdAt`/`createdBy`), builds the `ObjectUpdated` outbox row with `outboxPayload` (lines 300 to 310: `objectId`, `version`, `typeIri`, and `ontologyVersion` copied from the source row), and calls `objectStorePort.commit(scope, new ChangeSet(List.of(new Update(candidate, current.version())), List.of(outboxEntry)))` (line 174).
 - `DefaultActionExecutor.commitCreateObject` (lines 183 to 216) derives the new id with `derivedCreateId(rowId, actionIndex)` (lines 280 to 283: a name-based UUID of `rowId:actionIndex`), checks `find` for idempotency, builds the candidate with version 1, builds the `ObjectCreated` row, and calls `commit` (line 215).
-- So the Store-event payloads for automation-issued writes are built on the automation side today. Once the write is a Store Command, the Store side (the host binding over store-core) must build the candidate, the audit, and the outbox row, or the command must carry them. **Open: Q6 (section 12).**
+- So the Store-event payloads for automation-issued writes are built on the automation side today. Once the write is a Store Command, the Store side (the host binding over store-core) must build the candidate, the audit, and the outbox row, or the command must carry them. **Decided: Q6, option A (section 10).** The host binding builds them; the command carries only intent, the source event id, the action index and the source row's ontology version. Automation keeps the derived create id as its idempotency key. The payload shape is checked by a golden test against today's executor output.
 
 - **R1. The row record replaces `OutboxEntry` in the automation API.** `automation-api` defines `StoreEventRow(UUID id, String kind, Map<String, Object> payload, Instant occurredAt)`, a record with the same four fields as `org.sequeless.spi.outbox.OutboxEntry` (`record OutboxEntry(UUID id, String kind, Map<String, Object> payload, Instant occurredAt)`, `sequeless-spi/.../outbox/OutboxEntry.java` line 42). **Navigator (Q3, option A).** `ActionExecutor` (import at line 6 today), `TriggerEvaluator` (line 5), and `TimerScheduledEntry.of` take and return this record. The host relay maps `OutboxEntry` to it. The kind stays a string, not an enum. The encoding is additive only once published.
   - The static helper `OutboxEntry.timerKey(objectId, stateIri, transitionName)` is used by `ResolvedTimer`'s javadoc and by `DefaultTriggerEvaluator` (line 203). Its formula moves into `automation-api` unchanged, and a test pins its output. Timer keys name the Temporal timer workflows, so a changed key would orphan a running timer (H3).
@@ -112,11 +112,11 @@ Six modules. **Navigator (Q1, option B):** the webhook HTTP adapter is deferred.
 | `automation-core` | `org.sequeless.automation.core` | `automation-api`; `expression-api` 0.1.1 (`ExpressionPort`, used by `DefaultActionExecutor` to render templates); `kernel-values`; `schema-contract`, `behaviour-contract`, `automation-contract` 0.1.0 (for `SchemaSource`, `BehaviourSource`, `AutomationSource`) | `automation-testkit`, JUnit, AssertJ |
 | `automation-inprocess-adapter` | `org.sequeless.automation.inprocess` | `automation-api`; `automation-contract` 0.1.0; JDK `java.net.http` (no new dependency). Spring context, optional | `automation-testkit`, `automation-core` |
 | `automation-temporal-adapter` | `org.sequeless.automation.temporal` | `automation-api`; Temporal SDK (the version the prototype pins); Spring context, optional | `automation-testkit`, Temporal test support |
-| `automation-testkit` | `org.sequeless.automation.testkit` | `automation-api`; `kernel-identity`, `kernel-values`; JUnit, AssertJ | JUnit, AssertJ |
-| `automation-spring-boot-autoconfig` | `org.sequeless.automation.autoconfigure` | `automation-core`; the two adapters, optional; `spring-boot-autoconfigure` | `automation-testkit` |
+| `automation-testkit` | `org.sequeless.automation.testkit` | `automation-api`; `kernel-identity`, `kernel-values`; `automation-contract` (the contract's `Action` types are used directly by the contract test); JUnit, AssertJ | JUnit, AssertJ |
+| `automation-spring-boot-autoconfig` | `org.sequeless.automation.autoconfigure` | `automation-core`; `automation-inprocess-adapter` and `automation-temporal-adapter` (optional Maven dependencies: required to compile this module, not passed on to consumers); `temporal-sdk` and `temporal-serviceclient` (optional); `expression-api` 0.1.1, `schema-contract`, `behaviour-contract` and `automation-contract` 0.1.0 (the host ports' types); Spring Boot autoconfigure and context | `automation-testkit` |
 
 - **Adapters depend only on `automation-api`**, never on `automation-core` in main code. This is the rule the prototype has as `noAdapterDependsOnCore`. It is restated as a boundary test (section 7).
-- **Autoconfig placement (O-3, open).** Today each adapter owns its autoconfig class (`InProcessAutomationAutoConfiguration`, `TemporalAutomationAutoConfiguration`), selected by `sequeless.automation.adapter`. The plan follows the expression precedent: the autoconfig classes move into `automation-spring-boot-autoconfig`, which holds the one property switch. This is not yet a Navigator decision.
+- **Autoconfig placement (O-3, decided, option A, section 10).** Both adapter autoconfig classes (`InProcessAutomationAutoConfiguration`, `TemporalAutomationAutoConfiguration`) move into `automation-spring-boot-autoconfig`, which holds the one `sequeless.automation.adapter` switch and the core wiring (`AutomationCoreAutoConfiguration`).
 - **Deferred, in #20, not in spec 15:**
   - `automation-webhook-http-adapter` (Q1, option B). The webhook HTTP call stays in both adapters, which each hold their own delivery code (`InProcessAutomationPort` lines 92 to 265; `ActionActivitiesImpl` lines 43 to 139). Risks: the delivery code is duplicated, a fix is made twice, and a webhook port added later must be additive. `ResolvedWebhookRequest` stays unchanged and carries no HTTP client types.
   - `automation-postgres-adapter` (subscriptions, #20). There are no subscriptions in the prototype, so nothing moves.
@@ -148,7 +148,7 @@ Six modules. **Navigator (Q1, option B):** the webhook HTTP adapter is deferred.
 ## 8. ADRs
 
 - **Automation 0001, "The Store's outbox holds only Store events; automation owns Side-effect durability".** The draft is on the prototype branch `wayfinder/automation-outbox-adr` at `docs/drafts/sequeless-automation-adr-0001-outbox-holds-only-store-events.md` (dated 2026-10-18, status `proposed`, decided in #20). It is committed as `docs/adr/0001-outbox-holds-only-store-events.md` in the new repo, using the template's `docs/adr/_template.md`. Status on commit: **accepted**, because #20 decided it. The decision date stays 2026-10-18.
-- **Not new ADRs.** The Navigator decisions (Q1 to Q5) are recorded in this spec. Spec 13 kept port-level decisions in its spec, not in ADRs. Whether R2 and R3 warrant an ADR 0002 is open (O-8).
+- **ADR 0002, "Automation reads and writes the Store through its own ports"** (decided, Navigator batch 2, O-8 option A; approved by the parent). Committed as `docs/adr/0002-automation-reads-and-writes-through-its-own-ports.md` in the new repo, next to ADR 0001. It records the `StoreCommandPort` and `ObjectReadPort` shapes, the claim-transaction join (no `REQUIRES_NEW`), the idempotency key (claim id plus action index, from Q4), the denial rule (`ObjectReadDeniedException`, O-6), and the Q6 split (the host builds the candidate, the audit and the outbox row). The spec links to it and does not repeat it. Changes to the ports are additive; a breaking change needs a superseding ADR. The ADR is marked as covering Q4, Q5, O-5 and O-6.
 - **Kernel ADR 0001** (`proposed`) governs the package names (section 4). The automation ADR does not depend on it.
 
 ## 9. Definition of done
@@ -173,6 +173,16 @@ Navigator session `e8ce4259e32b4640adc5f3be70d39d9d`, batch 1 (five questions, e
 | Q4 | Store Command port | **A**: typed port in `automation-api`, host binds in-process inside the claim transaction. **Amended:** the port also carries the guarded fire-transition command | Store actions must not depend on store-core (#20 point 5). `DefaultTriggerEvaluator` fires through `TransitionService` at lines 159 and 240 |
 | Q5 | How automation reads object state | **A**: narrow read-only `ObjectReadPort` in `automation-api`, host-implemented, same claim transaction | Evaluator needs current state, type IRI and property values, including reference ids (lines 101, 148, 219). B would make spec 15 wait on spec 14. C cannot work: timer and candidate reads need fresh state |
 
+**Navigator batch 2** (session `81a4a137746d4364b79f674311df4147`, ended 2026-11-26), accepted by the parent:
+
+| Item | Decision | Reason |
+|---|---|---|
+| O-3 autoconfig placement | **A**: both adapters' autoconfigs move to `automation-spring-boot-autoconfig`, one `sequeless.automation.adapter` switch. Each adapter autoconfiguration class is guarded by a class-level `@ConditionalOnClass` (in-process: `InProcessAutomationPort`; Temporal: `TemporalAutomationPort` and `WorkflowClient`). The adapters and the Temporal SDK are optional Maven dependencies. They are required to compile this module and are not passed on to consumers, so a host declares the adapter it selects. `OneAdapterAtATimeTest` checks the runtime behaviour with the classes hidden. | Expression precedent; verified that both autoconfigs are `@ConditionalOnProperty` and registered in their adapters' imports files |
+| O-5 read view | **A**: view values are `kernel-values` `Value`, identity `ObjectId`, keys IRI strings | `expression-api` already uses `Value`. Risk: `automation-api` depends on `kernel-values`; add a no-Store-dependency check |
+| O-6 read denial | **B**: `ObjectReadDeniedException`, separate from empty; the claim fails, retry, dead-letter (DR-23) | A missing object is a real no-op; a denied read means misconfiguration |
+| O-8 ADR | **A**: ADR 0002 in the new repo | Public contracts, rationale must outlive the spec |
+| Q6 Store-event payloads | **A**: host binding builds candidate, audit, outbox row; command carries intent | The Store owns ChangeSet invariants; option B would put Store event schema in `automation-api` |
+
 **Open items:**
 
 - **O-1 (resolved 2026-11-26).** The agent's `gh repo create --template` call was refused by the auto-mode permission classifier. The owner allowed it, and the parent created `sequeless/sequeless-automation`. The agent did not retry the call.
@@ -183,7 +193,7 @@ Navigator session `e8ce4259e32b4640adc5f3be70d39d9d`, batch 1 (five questions, e
 - **O-5 (decided, Navigator batch 2, option A).** The view's property values are `kernel-values`' `Value`, identity is `ObjectId`, and keys are IRI strings, so no Store type leaks. Risk: `automation-api` depends on `kernel-values`, so `Value`'s shape is public and changes are additive only. Add a build check that `automation-api` has no Store-module dependency.
 - **O-6 (decided, Navigator batch 2, option B).** A denied `ObjectReadPort` read throws `ObjectReadDeniedException` (in `automation-api`), separate from the empty result. The claim fails, the row is retried, and it is dead-lettered after three failures (DR-23). Risks: a misconfigured Principal dead-letters every row that touches the denied object, so the log and metric name the Principal and the object; the exception must not reveal whether an object exists; a test covers a Principal without read permission ending in dead-letter; per-object denial dead-letters too, accepted behaviour.
 - **O-7 (follow-up, not blocking).** `sequeless-query`'s `ReadPort` (spec 14) may later supersede `ObjectReadPort`. Not coupled now.
-- **O-8 (open).** Whether R2 and R3 need an ADR 0002.
+- **O-8 (decided, option A).** ADR 0002 in the new repo (section 8).
 - **Escalated to the parent and not yet answered:** O-1, O-2, O-4.
 
 ## 11. Hazards
@@ -205,3 +215,44 @@ Navigator session `e8ce4259e32b4640adc5f3be70d39d9d`, batch 1 (five questions, e
 5. Implement R1 to R8 in the new repo, with Haiku subagents, and review each with an Opus subagent before the PR. Each PR needs green CI.
 6. ADR 0001 and the release (0.1.0, pre-approved).
 7. BOM entry (O-4), after the parent's signal.
+
+## 13. As built (U3): test counts, deviations, divergences and risks
+
+Modules on branch `spec-15-bootstrap` (PR #2). Each count is from that module's `verify` run, JDK 25, after its review. Each module was re-verified after the last change to it.
+
+| Module | Tests | Notes |
+|---|---|---|
+| `automation-api` | 70 | ports, records, `TimerKey`, `ObjectSnapshot`, `StoreEventRow`, command records, boundary and name-collision rules |
+| `automation-testkit` | 21 | `AutomationContract`, recording doubles, `InMemoryObjectReadPort`, `InMemoryStoreCommandPort` |
+| `automation-core` | 56 | `DefaultActionExecutor`, `DefaultTriggerEvaluator`, copied `SchemaAndBehaviour` and `PayloadValueCodec` subsets |
+| `automation-inprocess-adapter` | 40 | contract, redelivery (prototype PR #219 fixes ported), timer scheduler, webhook, properties defaults |
+| `automation-temporal-adapter` | 41 | the replay of the prototype's two timer histories passes, byte-identical |
+| `automation-spring-boot-autoconfig` | 29 | the three autoconfigurations, `OneAdapterAtATimeTest` (hidden classes), the periodic tick test |
+
+**Deviations from the brief and the decisions above.**
+
+1. `TemporalAutomationProperties` stays in `automation-temporal-adapter` (section 2 said it moves). It is the adapter's own configuration namespace, and the autoconfig binds it with a `@Bean` method annotated `@ConfigurationProperties`. The adapter has no Spring import and no Spring dependency.
+2. `TemporalActivityOptions` exposes `publish(ActivityOptions)`, called by the autoconfig before the activity implementations are created. Its field is private. The prototype's autoconfig assigned a public static field.
+3. `InProcessAutomationProperties` carries no Spring annotation. The autoconfig binds it by `PREFIX`, including `timer-tick-ms` (default 100 ms).
+4. `StoreEventRow` keeps the blank-kind and JSON-compatibility checks and drops the objectId check. The objectId exists for the Store's outbox column, which is a Store concern.
+5. `CommandProvenance` rejects a negative action index. The prototype did not.
+6. `TimerKey.of` throws `NullPointerException` on a null state or transition. The prototype produced the text "null".
+7. `DefaultActionExecutor` removes the unused `Clock`.
+8. `DefaultActionExecutor` and `DefaultTriggerEvaluator` copy `SchemaAndBehaviour` and `PayloadValueCodec.fromPayload` as package-private subsets. `toPayload` is dropped because nothing here calls it.
+9. The in-process adapter ports the prototype's PR #219 fixes (`23e19e9`): an `ObjectChangedEvent` id is recorded only after `onChange` returns; each timer is isolated in `sweep`; `InProcessTimerScheduler.tick()` guards the periodic task. A failing timer has no retry cap (Navigator decision, carried by #219).
+10. The autoconfig guards each adapter autoconfiguration with a class-level `@ConditionalOnClass` (not nested). The adapters are required at compile time, so the optional flag affects only consumers.
+11. `AutomationCoreAutoConfiguration` is ordered after `org.sequeless.expression.autoconfigure.JexlExpressionAutoConfiguration` by name (`@AutoConfigureAfter`), so the core beans see an `ExpressionPort` that the expression autoconfiguration supplies. Auto-configurations sort by name, so without it the `@ConditionalOnBean` check would find nothing. The ontology repo has no autoconfiguration class; the host supplies `SchemaSource` and `BehaviourSource`. The ordering test uses a stand-in autoconfiguration with the same name.
+12. The in-memory store fake (`InMemoryStoreCommandPort`) models idempotent repeats keyed by `(sourceEventId, actionIndex)` and claim rollback on rejection. It does not roll back earlier `fireTransition` calls, because that command has no provenance. This is a divergence from R8 for `fireTransition` only.
+13. Section 7's contract clauses for R2 (a missing object is a no-op) and R3 (rollback releases the claim) belong to the host binding's test, which runs in spec 17. `AutomationContract` does not carry them.
+
+**Divergences and risks carried to the handoff.**
+
+- **D-1, behaviour divergence.** The prototype and `sequeless-automation` differ in behaviour until spec 17 (section 3).
+- **D-2, unstamped rows.** The core now throws `IllegalStateException` when a command needs provenance and the `TransitionFired` row has no `ontologyVersion`. The prototype omitted the key. A legacy unstamped row therefore dead-letters after the cut-over. Spec 17 must confirm that no unstamped row is still pending when the new relay starts.
+- **H8, commit window (in-process, test/dev only).** A claim that fails after `onChange` returns and before its commit leaves the `ObjectChangedEvent` id recorded, so the redelivery skips `onChange`. The adapter accepts this window. It is documented in the class javadoc. Temporal is the durable runtime.
+- **H9, no retry cap.** A failing timer is retried on every sweep (Navigator decision, #219).
+- **H10, R2 (Temporal activity failure) is open** with its own owner (the parent). It is not fixed in this PR.
+- **H11, autoconfig compile dependency.** `automation-spring-boot-autoconfig` names the adapter types in its bean methods, so it compiles only with the adapter jars present. The optional flag affects only consumers.
+- **H12, host-binding drift.** The host binding of `StoreCommandPort` and `ObjectReadPort` is spec 17 work. Its golden test of the Store-side payload (Q6) and its contract test with a rollback case come with it.
+- **H13, pins.** Each module pins `kernel-identity` and `kernel-values` at 0.1.1 and `automation-contract` at 0.1.0 in `dependencyManagement`, because libraries do not import the BOM. The Temporal module also pins `guava` and `error_prone_annotations` for dependency convergence.
+- **H14, follow-up for the release.** `ObjectReadDeniedException` and the other public exceptions must stay additive. The release should freeze the API as published in 0.1.0.

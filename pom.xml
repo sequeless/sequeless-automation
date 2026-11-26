@@ -19,6 +19,15 @@
     <maven.deploy.skip>true</maven.deploy.skip>
   </properties>
 
+  <modules>
+    <module>automation-api</module>
+    <module>automation-core</module>
+    <module>automation-testkit</module>
+    <module>automation-inprocess-adapter</module>
+    <module>automation-temporal-adapter</module>
+    <module>automation-spring-boot-autoconfig</module>
+  </modules>
+
   <repositories>
     <repository>
       <id>github</id>

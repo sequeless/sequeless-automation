@@ -2,6 +2,47 @@
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "release-type": "maven",
   "include-component-in-tag": true,
-  "plugins": [{ "type": "maven-workspace" }],
-  "packages": {}
+  "plugins": [
+    {
+      "type": "maven-workspace"
+    }
+  ],
+  "packages": {
+    "automation-api": {
+      "component": "automation-api",
+      "initial-version": "0.1.0",
+      "versioning": "always-bump-patch",
+      "skip-snapshot": true
+    },
+    "automation-core": {
+      "component": "automation-core",
+      "initial-version": "0.1.0",
+      "versioning": "always-bump-patch",
+      "skip-snapshot": true
+    },
+    "automation-testkit": {
+      "component": "automation-testkit",
+      "initial-version": "0.1.0",
+      "versioning": "always-bump-patch",
+      "skip-snapshot": true
+    },
+    "automation-inprocess-adapter": {
+      "component": "automation-inprocess-adapter",
+      "initial-version": "0.1.0",
+      "versioning": "always-bump-patch",
+      "skip-snapshot": true
+    },
+    "automation-temporal-adapter": {
+      "component": "automation-temporal-adapter",
+      "initial-version": "0.1.0",
+      "versioning": "always-bump-patch",
+      "skip-snapshot": true
+    },
+    "automation-spring-boot-autoconfig": {
+      "component": "automation-spring-boot-autoconfig",
+      "initial-version": "0.1.0",
+      "versioning": "always-bump-patch",
+      "skip-snapshot": true
+    }
+  }
 }

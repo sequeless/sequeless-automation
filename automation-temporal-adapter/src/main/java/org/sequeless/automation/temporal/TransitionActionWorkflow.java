@@ -1,0 +1,26 @@
+package org.sequeless.automation.temporal;
+
+import io.temporal.workflow.WorkflowInterface;
+import io.temporal.workflow.WorkflowMethod;
+import org.sequeless.automation.api.StoreEventRow;
+
+/**
+ * The workflow for one action of a {@code TransitionFired} row. It durably applies the one action at
+ * a given index of the row's transition, through {@link
+ * ActionActivities#applyTransitionAction}. The port starts one execution per action index, with
+ * workflow id {@code "<eventId>:<index>"}, so each index gets its own run and its own idempotency.
+ */
+@WorkflowInterface
+public interface TransitionActionWorkflow {
+
+    /**
+     * Applies the action at {@code actionIndex} of the {@code TransitionFired} row {@code entry}, by
+     * calling {@link ActionActivities#applyTransitionAction}.
+     *
+     * @param entry the {@code TransitionFired}-kind {@link StoreEventRow} the action originates from
+     * @param actionIndex the action's 0-based position in the automation's list for the row's
+     *     transition
+     */
+    @WorkflowMethod
+    void execute(StoreEventRow entry, int actionIndex);
+}
