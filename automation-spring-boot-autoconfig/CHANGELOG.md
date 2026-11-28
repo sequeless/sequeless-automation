@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.1](https://github.com/sequeless/sequeless-automation/compare/automation-spring-boot-autoconfig-v0.1.0...automation-spring-boot-autoconfig-v0.1.1) (2026-11-28)
+
+
+### Features
+
+* record final automation action failures through an upstream port ([#5](https://github.com/sequeless/sequeless-automation/issues/5)) ([16fccd6](https://github.com/sequeless/sequeless-automation/commit/16fccd607e0381e6f46f67fe8b12ddc0365a22ea))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+    * org.sequeless:automation-api bumped to 0.1.1,
+    * org.sequeless:automation-temporal-adapter bumped to 0.1.1,
+    * org.sequeless:automation-core bumped to 0.1.1,
+    * org.sequeless:automation-inprocess-adapter bumped to 0.1.1,
+    * org.sequeless:automation-testkit bumped to 0.1.1
+
 ## 0.1.0 (2026-11-26)
 
 
