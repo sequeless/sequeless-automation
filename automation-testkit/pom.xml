@@ -12,7 +12,7 @@
 
   <groupId>org.sequeless</groupId>
   <artifactId>automation-testkit</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
   <name>automation-testkit</name>
   <description>Automation testkit: the AutomationPort contract and in-memory test doubles for the automation API.</description>
 
@@ -62,7 +62,7 @@
     <dependency>
       <groupId>org.sequeless</groupId>
       <artifactId>automation-api</artifactId>
-      <version>0.1.0</version>
+      <version>0.1.1</version>
     </dependency>
     <dependency>
       <groupId>org.sequeless</groupId>
