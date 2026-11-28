@@ -9,6 +9,7 @@ import io.temporal.worker.Worker;
 import io.temporal.worker.WorkerFactory;
 import java.time.Duration;
 import org.sequeless.automation.api.ActionExecutor;
+import org.sequeless.automation.api.AutomationFailureRecorder;
 import org.sequeless.automation.api.AutomationPort;
 import org.sequeless.automation.api.TriggerEvaluator;
 import org.sequeless.automation.temporal.ActionActivitiesImpl;
@@ -22,6 +23,7 @@ import org.sequeless.automation.temporal.TriggerActivitiesImpl;
 import org.sequeless.ontology.automation.spi.AutomationSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -129,6 +131,7 @@ public class TemporalAutomationAutoConfiguration {
      * @param actionExecutor the action executor the action activities call
      * @param triggerEvaluator the trigger evaluator the trigger activities call
      * @param automationSource the source the action activities read the automation from
+     * @param failureRecorders the host's failure recorder, if it has one; without one, final failures are not recorded
      * @param props the bound configuration, supplying the task queue and the retry policy
      * @return the worker factory, kept as a bean so the context shuts it down
      */
@@ -138,6 +141,7 @@ public class TemporalAutomationAutoConfiguration {
             ActionExecutor actionExecutor,
             TriggerEvaluator triggerEvaluator,
             AutomationSource automationSource,
+            ObjectProvider<AutomationFailureRecorder> failureRecorders,
             TemporalAutomationProperties props) {
         TemporalActivityOptions.publish(buildActivityOptions(props.getRetry()));
 
@@ -146,7 +150,10 @@ public class TemporalAutomationAutoConfiguration {
         worker.registerWorkflowImplementationTypes(
                 TransitionActionWorkflowImpl.class, ChangeEventWorkflowImpl.class, TimerWorkflowImpl.class);
         worker.registerActivitiesImplementations(
-                new ActionActivitiesImpl(actionExecutor, automationSource),
+                new ActionActivitiesImpl(
+                        actionExecutor,
+                        automationSource,
+                        failureRecorders.getIfAvailable(AutomationFailureRecorder::none)),
                 new TriggerActivitiesImpl(triggerEvaluator));
         try {
             factory.start();

@@ -182,6 +182,11 @@
       <groupId>org.springframework</groupId>
       <artifactId>spring-context</artifactId>
     </dependency>
+    <!-- ObjectProvider, which the Temporal autoconfiguration takes for the optional failure recorder. -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-beans</artifactId>
+    </dependency>
 
     <!-- Test scope. The in-process adapter and the core supply the test beans, and the testkit supplies the in-memory
          ports and the recording doubles. -->
@@ -222,12 +227,6 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-test</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <!-- The test bytecode names spring-beans types through the context runner's assertable context. No main code uses it. -->
-    <dependency>
-      <groupId>org.springframework</groupId>
-      <artifactId>spring-beans</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

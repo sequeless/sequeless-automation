@@ -34,4 +34,18 @@ public interface ActionActivities {
      */
     @ActivityMethod
     void applyTransitionAction(Scope scope, StoreEventRow transitionFired, int actionIndex);
+
+    /**
+     * Records the final failure of {@link #applyTransitionAction} through the host's {@link
+     * org.sequeless.automation.api.AutomationFailureRecorder}. {@link TransitionActionWorkflowImpl} calls it once,
+     * after the activity has used its retries or failed without one, and then fails the workflow as before.
+     *
+     * @param scope the tenant and principal the failed workflow ran for
+     * @param transitionFired the {@code TransitionFired}-kind {@link StoreEventRow} the failed action originates from
+     * @param actionIndex the failed action's 0-based position in the automation's list for the row's transition
+     * @param cause a description of the root failure, as {@link
+     *     org.sequeless.automation.api.AutomationFailure#cause()} documents it
+     */
+    @ActivityMethod
+    void recordTransitionActionFailure(Scope scope, StoreEventRow transitionFired, int actionIndex, String cause);
 }
