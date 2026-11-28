@@ -43,11 +43,14 @@ The workflow id is `transitionFired.id() + ":" + actionIndex`, the id `TemporalA
 
 ## Consequences
 
-- The recorder is called for every final failure of the per-action path, not only the three cases. This includes
-  `applyAction` failures, which the host's executor wrapper also records today. A host must therefore key its records by
-  workflow id, so that a second record for the same id is a no-op. The port's javadoc states this as an idempotency
-  requirement.
-- A `StartToClose` timeout on the final attempt is now recorded too. The spec 17 open item (a) is closed for this path.
+- The recorder is called for every final failure of the per-action path, not only the three cases. The three cases are
+  the minimum. Recording every final failure is deliberate, because the workflow cannot tell the three apart without
+  matching on exception text. This includes `applyAction` failures, which the host's executor wrapper also records
+  today. The workflow id is the dedupe key. A host must key its records by it, so that a second record for the same id
+  is a no-op. The two causes of a repeat call are a retry of the recording activity, and the host's own executor
+  wrapper. The port's javadoc states this as an idempotency requirement.
+- A `StartToClose` timeout on the final attempt is recorded by the same catch. No test covers this path, so spec 17
+  open item (a) is not marked closed.
 - Recording happens in a separate activity, so the record can itself be retried. A recorder that keeps throwing keeps
   the workflow retrying that record step. It does not hide the original failure.
 - The port has no in-process adapter counterpart. The in-process adapter keeps its own `WebhookDeliveryException` path

@@ -9,9 +9,10 @@ package org.sequeless.automation.api;
  * stays visible in Temporal history and logs whether or not a recorder is wired. The recorder adds the owner-facing
  * record.
  *
- * <p><b>Idempotency.</b> A recorder may be called more than once for the same {@link AutomationFailure#workflowId()}:
- * the Temporal activity that makes the call can itself be retried. An implementation should treat a second record for
- * the same workflow id as a no-op.
+ * <p><b>Idempotency.</b> The {@link AutomationFailure#workflowId()} is the dedupe key. A recorder may be called more
+ * than once for the same key: the Temporal activity that makes the call can itself be retried, and a host may also
+ * record the same failure in its own executor wrapper. An implementation should treat a second record for the same
+ * workflow id as a no-op.
  *
  * <p>When no recorder bean is present, the Temporal adapter uses a recorder that does nothing.
  */
