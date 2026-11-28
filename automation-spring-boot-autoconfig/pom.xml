@@ -12,7 +12,7 @@
 
   <groupId>org.sequeless</groupId>
   <artifactId>automation-spring-boot-autoconfig</artifactId>
-  <version>0.1.1</version>
+  <version>0.1.2</version>
   <name>automation-spring-boot-autoconfig</name>
   <description>Spring Boot auto-configuration for the automation modules: the core beans, and one adapter selected by sequeless.automation.adapter.</description>
 
@@ -117,7 +117,7 @@
     <dependency>
       <groupId>org.sequeless</groupId>
       <artifactId>automation-core</artifactId>
-      <version>0.1.1</version>
+      <version>0.1.2</version>
     </dependency>
     <dependency>
       <groupId>org.sequeless</groupId>
@@ -150,13 +150,13 @@
     <dependency>
       <groupId>org.sequeless</groupId>
       <artifactId>automation-inprocess-adapter</artifactId>
-      <version>0.1.1</version>
+      <version>0.1.2</version>
       <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>org.sequeless</groupId>
       <artifactId>automation-temporal-adapter</artifactId>
-      <version>0.1.1</version>
+      <version>0.1.2</version>
       <optional>true</optional>
     </dependency>
     <dependency>
@@ -193,7 +193,7 @@
     <dependency>
       <groupId>org.sequeless</groupId>
       <artifactId>automation-testkit</artifactId>
-      <version>0.1.1</version>
+      <version>0.1.2</version>
       <scope>test</scope>
     </dependency>
     <dependency>
