@@ -37,6 +37,7 @@ final class RecordingTransitionExecutor implements ActionExecutor {
 
     private final List<Call> calls = Collections.synchronizedList(new ArrayList<>());
     private volatile String webhookUrl;
+    private volatile boolean failResolve;
 
     /**
      * Sets the URL every {@link #resolveWebhookAction} call resolves to. Kept across {@link #reset()}.
@@ -45,6 +46,16 @@ final class RecordingTransitionExecutor implements ActionExecutor {
      */
     void setWebhookUrl(String webhookUrl) {
         this.webhookUrl = webhookUrl;
+    }
+
+    /**
+     * Makes every {@link #resolveWebhookAction} call throw a plain {@link RuntimeException}, as a final resolve failure
+     * would. Cleared by {@link #reset()}.
+     *
+     * @param failResolve {@code true} to make resolving fail
+     */
+    void setFailResolve(boolean failResolve) {
+        this.failResolve = failResolve;
     }
 
     /** @return a snapshot of every recorded call, in invocation order, unmodifiable */
@@ -57,6 +68,7 @@ final class RecordingTransitionExecutor implements ActionExecutor {
     /** Clears the recorded calls. The webhook URL is kept. */
     void reset() {
         calls.clear();
+        failResolve = false;
     }
 
     @Override
@@ -67,6 +79,9 @@ final class RecordingTransitionExecutor implements ActionExecutor {
     @Override
     public ResolvedWebhookRequest resolveWebhookAction(
             Scope scope, StoreEventRow transitionFired, WebhookAction action, int actionIndex) {
+        if (failResolve) {
+            throw new RuntimeException("RecordingTransitionExecutor is set to fail resolving");
+        }
         calls.add(new Call(METHOD_RESOLVE_WEBHOOK_ACTION, actionIndex, transitionFired.id(), action));
         return new ResolvedWebhookRequest(webhookUrl, action.method(), Optional.empty());
     }

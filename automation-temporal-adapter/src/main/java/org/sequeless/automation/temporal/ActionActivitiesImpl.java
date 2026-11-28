@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.sequeless.automation.api.ActionExecutor;
+import org.sequeless.automation.api.AutomationFailure;
+import org.sequeless.automation.api.AutomationFailureRecorder;
 import org.sequeless.automation.api.ResolvedWebhookRequest;
 import org.sequeless.automation.api.StoreEventRow;
 import org.sequeless.kernel.identity.Scope;
@@ -39,18 +41,59 @@ public final class ActionActivitiesImpl implements ActionActivities {
 
     private final ActionExecutor actionExecutor;
     private final AutomationSource automationSource;
+    private final AutomationFailureRecorder failureRecorder;
     private final HttpClient httpClient;
 
     /**
+     * A constructor without a failure recorder: a final failure is then left only in Temporal history.
+     *
      * @param actionExecutor the {@link ActionExecutor} this activity implementation calls back
      *     into; must not be {@code null}
      * @param automationSource the {@link AutomationSource} {@link #applyTransitionAction} reads the
      *     automation of the row's ontology version from; must not be {@code null}
      */
     public ActionActivitiesImpl(ActionExecutor actionExecutor, AutomationSource automationSource) {
+        this(actionExecutor, automationSource, AutomationFailureRecorder.none());
+    }
+
+    /**
+     * @param actionExecutor the {@link ActionExecutor} this activity implementation calls back
+     *     into; must not be {@code null}
+     * @param automationSource the {@link AutomationSource} {@link #applyTransitionAction} reads the
+     *     automation of the row's ontology version from; must not be {@code null}
+     * @param failureRecorder the port {@link #recordTransitionActionFailure} records a final failure through;
+     *     must not be {@code null}
+     */
+    public ActionActivitiesImpl(
+            ActionExecutor actionExecutor,
+            AutomationSource automationSource,
+            AutomationFailureRecorder failureRecorder) {
         this.actionExecutor = Objects.requireNonNull(actionExecutor, "actionExecutor must not be null");
         this.automationSource = Objects.requireNonNull(automationSource, "automationSource must not be null");
+        this.failureRecorder = Objects.requireNonNull(failureRecorder, "failureRecorder must not be null");
         this.httpClient = HttpClient.newHttpClient();
+    }
+
+    /**
+     * Records one final failure of a per-action workflow. The workflow id is {@code transitionFired.id() + ":" +
+     * actionIndex}, the id {@link TemporalAutomationPort} starts that workflow under.
+     */
+    @Override
+    public void recordTransitionActionFailure(
+            Scope scope, StoreEventRow transitionFired, int actionIndex, String cause) {
+        Map<String, Object> payload = transitionFired.payload();
+        TransitionRef transition = null;
+        if (payload.get("machineIri") instanceof String machine
+                && payload.get("fromState") instanceof String from
+                && payload.get("transitionName") instanceof String name) {
+            transition = new TransitionRef(machine, from, name);
+        }
+        failureRecorder.record(new AutomationFailure(
+                scope,
+                transitionFired.id() + ":" + actionIndex,
+                TransitionActionWorkflow.class.getSimpleName(),
+                transition,
+                cause));
     }
 
     /**

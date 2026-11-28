@@ -32,6 +32,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.sequeless.automation.api.AutomationFailure;
 import org.sequeless.automation.api.StoreEventRow;
 import org.sequeless.kernel.identity.Principal;
 import org.sequeless.kernel.identity.Scope;
@@ -66,10 +67,13 @@ class TransitionActionWorkflowTest {
     private static final String STATUS_IRI = "http://example.org/status";
     private static final String TRANSITION_NAME = "activate";
     private static final String HOOK_PATH = "/hook";
+    private static final String FAILING_HOOK_PATH = "/failing-hook";
 
     private static final AtomicInteger webhookHits = new AtomicInteger();
+    private static final AtomicInteger failingWebhookHits = new AtomicInteger();
     private static HttpServer webhookServer;
     private static RecordingTransitionExecutor executor;
+    private static RecordingAutomationFailureRecorder recorder;
     private static TestWorkflowEnvironment env;
 
     @BeforeAll
@@ -93,15 +97,24 @@ class TransitionActionWorkflowTest {
             exchange.sendResponseHeaders(200, -1);
             exchange.close();
         });
+        webhookServer.createContext(FAILING_HOOK_PATH, exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            failingWebhookHits.incrementAndGet();
+            exchange.sendResponseHeaders(500, -1);
+            exchange.close();
+        });
         webhookServer.start();
 
         executor = new RecordingTransitionExecutor();
         executor.setWebhookUrl("http://localhost:" + webhookServer.getAddress().getPort() + HOOK_PATH);
 
+        recorder = new RecordingAutomationFailureRecorder();
+
         env = TestWorkflowEnvironment.newInstance();
         Worker worker = env.newWorker(TASK_QUEUE);
         worker.registerWorkflowImplementationTypes(TransitionActionWorkflowImpl.class);
-        worker.registerActivitiesImplementations(new ActionActivitiesImpl(executor, new SwappableAutomationSource()));
+        worker.registerActivitiesImplementations(
+                new ActionActivitiesImpl(executor, new SwappableAutomationSource(), recorder));
         env.start();
     }
 
@@ -115,7 +128,75 @@ class TransitionActionWorkflowTest {
     void resetDoubles() {
         SwappableAutomationSource.reset();
         executor.reset();
+        recorder.reset();
         webhookHits.set(0);
+        failingWebhookHits.set(0);
+    }
+
+    @Test
+    void recordsNothingWhenEveryActionSucceeds() {
+        SwappableAutomationSource.current = automationAt(1, new LogAction("project activated"));
+        StoreEventRow entry = transitionFired(1);
+
+        runToCompletion(entry, 0);
+
+        assertThat(recorder.failures()).isEmpty();
+    }
+
+    @Test
+    void recordsAWebhookDeliveryFailureOnceAfterItsLastAttempt() {
+        WebhookAction webhook = new WebhookAction("https://example.invalid/hook", "POST", Optional.empty());
+        SwappableAutomationSource.current = automationAt(1, webhook);
+        executor.setWebhookUrl("http://localhost:" + webhookServer.getAddress().getPort() + FAILING_HOOK_PATH);
+        StoreEventRow entry = transitionFired(1);
+
+        try {
+            ApplicationFailure failure =
+                    failureOf(runToFailure(entry, 0), RetryState.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED);
+
+            assertThat(failure.getType()).isEqualTo(WebhookActivityException.class.getName());
+            assertThat(failingWebhookHits.get()).isEqualTo(3);
+            assertThat(recorder.failures()).hasSize(1);
+            AutomationFailure recorded = recorder.failures().get(0);
+            assertThat(recorded.workflowId()).isEqualTo(entry.id() + ":0");
+            assertThat(recorded.workflowType()).isEqualTo("TransitionActionWorkflow");
+            assertThat(recorded.transition()).isEqualTo(new TransitionRef(MACHINE_IRI, DRAFT_IRI, TRANSITION_NAME));
+            assertThat(recorded.cause())
+                    .startsWith(WebhookActivityException.class.getName() + ": Webhook delivery to ")
+                    .endsWith("received non-2xx status 500");
+        } finally {
+            executor.setWebhookUrl(
+                    "http://localhost:" + webhookServer.getAddress().getPort() + HOOK_PATH);
+        }
+    }
+
+    @Test
+    void recordsAFinalWebhookResolveFailureAndStillFailsTheWorkflow() {
+        WebhookAction webhook = new WebhookAction("https://example.invalid/hook", "POST", Optional.empty());
+        SwappableAutomationSource.current = automationAt(1, webhook);
+        executor.setFailResolve(true);
+        StoreEventRow entry = transitionFired(1);
+
+        ApplicationFailure failure = failureOf(runToFailure(entry, 0), RetryState.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED);
+
+        assertThat(failure.getType()).isEqualTo("java.lang.RuntimeException");
+        assertThat(recorder.failures()).hasSize(1);
+        assertThat(recorder.failures().get(0).cause())
+                .isEqualTo("java.lang.RuntimeException: RecordingTransitionExecutor is set to fail resolving");
+        assertThat(recorder.failures().get(0).workflowId()).isEqualTo(entry.id() + ":0");
+    }
+
+    @Test
+    void stillFailsTheWorkflowWhenTheRecorderItselfFails() {
+        SwappableAutomationSource.current = automationAt(2, new LogAction("project activated"));
+        recorder.setFailRecording(true);
+        StoreEventRow entry = transitionFired(1);
+
+        WorkflowFailedException failed = runToFailure(entry, 0);
+
+        ApplicationFailure failure = failureOf(failed, RetryState.RETRY_STATE_NON_RETRYABLE_FAILURE);
+        assertThat(failure.getType()).isEqualTo("TransitionFiredStampMismatch");
+        assertThat(recorder.failures()).isEmpty();
     }
 
     @Test
@@ -226,6 +307,8 @@ class TransitionActionWorkflowTest {
         assertThat(failure.getType()).isEqualTo("java.lang.RuntimeException");
         assertThat(failure.isNonRetryable()).isFalse();
         assertThat(SwappableAutomationSource.calls.get()).isEqualTo(3);
+        // Recorded once, after the last attempt, not once per attempt.
+        assertRecordedOnce(entry, 0, "java.lang.RuntimeException: SwappableAutomationSource is set to fail every call");
     }
 
     /**
@@ -242,6 +325,17 @@ class TransitionActionWorkflowTest {
         assertThat(failure.getOriginalMessage()).isEqualTo(message);
         assertThat(SwappableAutomationSource.calls.get()).isEqualTo(1);
         assertThat(executor.calls()).isEmpty();
+        assertRecordedOnce(entry, index, type + ": " + message);
+    }
+
+    /** Asserts the recorder got exactly one failure for {@code entry} at {@code index}, with {@code cause}. */
+    private static void assertRecordedOnce(StoreEventRow entry, int index, String cause) {
+        assertThat(recorder.failures()).hasSize(1);
+        AutomationFailure recorded = recorder.failures().get(0);
+        assertThat(recorded.workflowId()).isEqualTo(entry.id() + ":" + index);
+        assertThat(recorded.workflowType()).isEqualTo("TransitionActionWorkflow");
+        assertThat(recorded.scope()).isEqualTo(SCOPE);
+        assertThat(recorded.cause()).isEqualTo(cause);
     }
 
     /**
