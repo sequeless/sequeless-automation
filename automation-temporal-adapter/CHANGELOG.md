@@ -1,5 +1,8 @@
 # Changelog
 
+* The following workspace dependencies were updated
+    * org.sequeless:automation-testkit bumped to 0.1.2
+
 ## [0.1.1](https://github.com/sequeless/sequeless-automation/compare/automation-temporal-adapter-v0.1.0...automation-temporal-adapter-v0.1.1) (2026-11-28)
 
 

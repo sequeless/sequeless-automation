@@ -1,5 +1,11 @@
 # Changelog
 
+* The following workspace dependencies were updated
+    * org.sequeless:automation-core bumped to 0.1.2,
+    * org.sequeless:automation-inprocess-adapter bumped to 0.1.2,
+    * org.sequeless:automation-testkit bumped to 0.1.2,
+    * org.sequeless:automation-temporal-adapter bumped to 0.1.2
+
 ## [0.1.1](https://github.com/sequeless/sequeless-automation/compare/automation-spring-boot-autoconfig-v0.1.0...automation-spring-boot-autoconfig-v0.1.1) (2026-11-28)
 
 

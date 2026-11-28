@@ -12,7 +12,7 @@
 
   <groupId>org.sequeless</groupId>
   <artifactId>automation-inprocess-adapter</artifactId>
-  <version>0.1.1</version>
+  <version>0.1.2</version>
   <name>automation-inprocess-adapter</name>
   <description>In-process automation adapter: a synchronous AutomationPort for tests and local development.</description>
 
@@ -104,7 +104,7 @@
     <dependency>
       <groupId>org.sequeless</groupId>
       <artifactId>automation-testkit</artifactId>
-      <version>0.1.1</version>
+      <version>0.1.2</version>
       <scope>test</scope>
     </dependency>
 
